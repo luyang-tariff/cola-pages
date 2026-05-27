@@ -163,6 +163,17 @@ function doSearch(q) {
   for (const c in hs) {
     if (c !== q && c.startsWith(q)) { out.push([c, hs[c].d, hs[c].r]); if (out.length >= 20) break; }
   }
+  // Fallback: if no results, try shorter prefixes (e.g. 9405.40 → 9405.4 → 9405)
+  if (out.length === 0) {
+    let prefix = q;
+    while (prefix.length > 2) {
+      prefix = prefix.slice(0, -1).replace(/\.$/, '');
+      for (const c in hs) {
+        if (c.startsWith(prefix) && !out.find(o => o[0]===c)) { out.push([c, hs[c].d, hs[c].r]); if (out.length >= 20) break; }
+      }
+      if (out.length > 0) break;
+    }
+  }
   if (out.length === 0) { hideAutocomplete(); return; }
   ac.innerHTML = out.slice(0, 20).map(([c,d,r]) =>
     `<div class="autocomplete-item" onclick="selectHts('${c}','${d.replace(/'/g,"\\'")}')">
