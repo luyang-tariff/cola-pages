@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>美国进口关税计算器</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;background:#f8fafc;min-height:100vh;color:#1e293b}
+.container{max-width:720px;margin:0 auto;padding:24px 16px}
+.header{text-align:center;margin-bottom:32px}
+.header h1{font-size:1.75rem;font-weight:700;color:#0f172a;margin-bottom:8px}
+.header p{font-size:.875rem;color:#64748b}
+.card{background:#fff;border-radius:12px;border:1px solid #e2e8f0;padding:24px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.card h2{font-size:1.125rem;font-weight:600;margin-bottom:20px;color:#334155}
+.field{margin-bottom:16px;position:relative}
+.field label{display:block;font-size:.875rem;font-weight:500;color:#475569;margin-bottom:6px}
+.field input{width:100%;padding:12px 16px;border:1px solid #cbd5e1;border-radius:8px;font-size:.875rem;outline:none;transition:border-color .15s}
+.field input:focus{border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.1)}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.mode-switch{display:flex;border-radius:8px;border:1px solid #cbd5e1;overflow:hidden}
+.mode-btn{flex:1;padding:12px;text-align:center;font-size:.875rem;font-weight:500;cursor:pointer;border:none;transition:all .15s}
+.mode-btn.active{background:#3b82f6;color:#fff}
+.mode-btn:not(.active){background:#fff;color:#64748b}
+.mode-btn:not(.active):hover{background:#f1f5f9}
+.calc-btn{width:100%;padding:14px;background:#3b82f6;color:#fff;border:none;border-radius:8px;font-size:.875rem;font-weight:600;cursor:pointer;transition:background .15s}
+.calc-btn:hover{background:#2563eb}
+.calc-btn:disabled{background:#94a3b8;cursor:not-allowed}
+.result-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f1f5f9}
+.result-row:last-child{border-bottom:none}
+.result-label{font-size:.875rem;color:#64748b}
+.result-value{font-size:.875rem;font-weight:500;color:#334155}
+.result-value.mono{font-family:monospace}
+.result-divider{border-top:2px solid #e2e8f0;margin:12px 0}
+.result-total{display:flex;justify-content:space-between;align-items:center;padding:14px 12px;margin:12px -8px 0;background:#eff6ff;border-radius:8px}
+.result-total .label{font-size:1rem;font-weight:600;color:#1e40af}
+.result-total .value{font-size:1.375rem;font-weight:700;color:#1d4ed8}
+.result-effective{display:flex;justify-content:space-between;padding-top:8px;font-size:.875rem;color:#64748b}
+.message{display:none;background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;border-radius:8px;padding:12px 16px;font-size:.875rem;margin-top:12px}
+.footer{text-align:center;font-size:.75rem;color:#94a3b8;margin-top:32px;line-height:1.8}
+.footer a{color:#3b82f6;text-decoration:none}
+.autocomplete{display:none;position:absolute;z-index:10;width:100%;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.08);max-height:240px;overflow-y:auto;top:100%;left:0}
+.autocomplete-item{padding:10px 16px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #f8fafc;font-size:.875rem}
+.autocomplete-item:last-child{border-bottom:none}
+.autocomplete-item:hover{background:#eff6ff}
+.autocomplete-item .code{font-family:monospace;color:#3b82f6;font-weight:500}
+.autocomplete-item .desc{color:#94a3b8;margin-left:12px;text-align:right;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.8rem}
+.hts-desc{font-size:.75rem;color:#94a3b8;margin-top:4px;display:none}
+.loading{text-align:center;padding:40px;color:#64748b}
+.spinner{display:inline-block;width:24px;height:24px;border:3px solid #e2e8f0;border-top-color:#3b82f6;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:8px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.s301{color:#ea580c}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>🇺🇸 美国进口关税计算器</h1>
+    <p>输入 HTS 编码和货值，自动计算总关税（含 301 附加税 · MPF · HMF）</p>
+  </div>
+
+  <div id="loading" class="card loading">
+    <div><span class="spinner"></span>正在加载 HTS 税率数据…</div>
+  </div>
+
+  <div id="app" style="display:none">
+    <div class="card">
+      <div class="field">
+        <label>HTS 编码</label>
+        <input id="htsInput" type="text" placeholder="输入 HTS 编码搜索，如 9405.40" autocomplete="off">
+        <div id="autocomplete" class="autocomplete"></div>
+        <div id="htsDesc" class="hts-desc"></div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>申报货值 (USD)</label>
+          <input id="valueInput" type="number" step="0.01" min="0" placeholder="如 5000">
+        </div>
+        <div class="field">
+          <label>运输方式</label>
+          <div class="mode-switch">
+            <button class="mode-btn active" onclick="setMode('ocean')">🚢 海运</button>
+            <button class="mode-btn" onclick="setMode('air')">✈️ 空运</button>
+          </div>
+        </div>
+      </div>
+      <button id="calcBtn" class="calc-btn" onclick="calculate()">计算关税</button>
+    </div>
+
+    <div id="results" class="card hidden">
+      <h2>📊 关税明细</h2>
+      <div class="result-row"><span class="result-label">HTS 编码</span><span class="result-value mono" id="r_hts">-</span></div>
+      <div class="result-row"><span class="result-label">商品描述</span><span class="result-value" id="r_desc" style="text-align:right;max-width:280px">-</span></div>
+      <div class="result-row"><span class="result-label">申报货值</span><span class="result-value" id="r_value">-</span></div>
+      <div class="result-divider"></div>
+      <div class="result-row"><span class="result-label">基础关税</span><span class="result-value" id="r_base">-</span></div>
+      <div class="result-row" id="row_301"><span class="result-label">301 对华附加关税</span><span class="result-value s301" id="r_301">-</span></div>
+      <div class="result-row"><span class="result-label">MPF (处理费 0.3464%)</span><span class="result-value" id="r_mpf">-</span></div>
+      <div class="result-row" id="row_hmf"><span class="result-label">HMF (港口费 0.125%)</span><span class="result-value" id="r_hmf">-</span></div>
+      <div class="result-total"><span class="label">总关税</span><span class="value" id="r_total">-</span></div>
+      <div class="result-effective"><span>综合税率</span><span id="r_effective">-</span></div>
+    </div>
+
+    <div id="message" class="message"></div>
+
+    <div class="footer">
+      ⚠️ 仅供参考，实际关税以 CBP 核定为准。从量税商品请人工确认。<br>
+      数据源：USITC HTS 2026 Rev 8 · 11,569 个 HTS · 66 条 301 规则
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Global state ──
+let D = null;
+let currentMode = 'ocean';
+let searchTimer = null;
+
+// ── Load data ──
+(async function init() {
+  try {
+    const resp = await fetch('./hts_compact.json');
+    D = await resp.json();
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+  } catch(e) {
+    document.getElementById('loading').innerHTML = '<div style="color:#b91c1c">⚠️ 数据加载失败，请刷新页面重试</div>';
+    console.error('Failed to load HTS data:', e);
+  }
+})();
+
+// ── Mode ──
+function setMode(m) {
+  currentMode = m;
+  document.querySelectorAll('.mode-btn').forEach(b => {
+    b.classList.toggle('active', (m==='ocean' ? b.textContent.includes('海运') : b.textContent.includes('空运')));
+  });
+}
+
+// ── Search ──
+document.getElementById('htsInput').addEventListener('input', function() {
+  clearTimeout(searchTimer);
+  const q = this.value.trim();
+  if (q.length < 2) { hideAutocomplete(); return; }
+  searchTimer = setTimeout(() => doSearch(q), 150);
+});
+
+document.getElementById('htsInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') { hideAutocomplete(); calculate(); }
+});
+
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('#htsInput') && !e.target.closest('#autocomplete')) hideAutocomplete();
+});
+
+function doSearch(q) {
+  q = q.replace(/[^0-9.]/g, '');
+  const ac = document.getElementById('autocomplete');
+  const hs = D.hs;
+  let out = [];
+  if (hs[q]) out.push([q, hs[q].d, hs[q].r]);
+  for (const c in hs) {
+    if (c !== q && c.startsWith(q)) { out.push([c, hs[c].d, hs[c].r]); if (out.length >= 20) break; }
+  }
+  if (out.length === 0) { hideAutocomplete(); return; }
+  ac.innerHTML = out.slice(0, 20).map(([c,d,r]) =>
+    `<div class="autocomplete-item" onclick="selectHts('${c}','${d.replace(/'/g,"\\'")}')">
+      <span class="code">${c}</span><span class="desc">${d}</span>
+    </div>`
+  ).join('');
+  ac.style.display = 'block';
+}
+
+function hideAutocomplete() {
+  document.getElementById('autocomplete').style.display = 'none';
+}
+
+function selectHts(code, desc) {
+  document.getElementById('htsInput').value = code;
+  document.getElementById('htsDesc').textContent = desc;
+  document.getElementById('htsDesc').style.display = 'block';
+  hideAutocomplete();
+}
+
+// ── Lookup ──
+function lookup(q) {
+  q = q.replace(/[^0-9.]/g, '');
+  if (D.hs[q]) return [q, D.hs[q]];
+  let s = q;
+  while (s.length > 4) {
+    s = s.replace(/\.?0*$/, '');
+    if (s === q) break;
+    if (D.hs[s]) return [s, D.hs[s]];
+    q = s;
+  }
+  for (const c in D.hs) {
+    if (c.startsWith(q)) return [c, D.hs[c]];
+  }
+  return [null, null];
+}
+
+function parsePct(v) {
+  if (typeof v === 'number') return v;
+  const m = String(v).match(/^(\d+\.?\d*)\s*%$/);
+  return m ? parseFloat(m[1]) : null;
+}
+
+// ── Calculate ──
+function calculate() {
+  const htsInput = document.getElementById('htsInput').value.trim();
+  const valueInput = document.getElementById('valueInput').value;
+  document.getElementById('results').classList.add('hidden');
+  hideMsg();
+
+  if (!htsInput) { showMsg('请输入 HTS 编码'); return; }
+  if (!valueInput || parseFloat(valueInput) <= 0) { showMsg('请输入有效货值'); return; }
+
+  const value = parseFloat(valueInput);
+  const [code, entry] = lookup(htsInput);
+  if (!entry) { showMsg('未找到该 HTS 编码'); return; }
+
+  const rt = entry.t, rv = entry.r;
+  let base = 0, bp = null;
+  if (rt === 'percent') {
+    bp = parsePct(rv);
+    if (bp !== null) base = value * (bp / 100);
+  }
+
+  let s3d = 0, s3r = null;
+  const s3list = D.m3[code];
+  if (s3list && bp !== null) {
+    for (const sc of s3list) {
+      const ar = D.s3[sc];
+      if (ar !== undefined && ar > 0) s3r = Math.max(s3r || 0, ar);
+    }
+    if (s3r) s3d = value * (s3r / 100);
+  }
+
+  let mpf = value * 0.003464;
+  if (value > 2500) mpf = Math.max(33.58, Math.min(651.50, mpf));
+  else mpf = 0;
+
+  let hmf = currentMode === 'ocean' ? value * 0.00125 : 0;
+
+  const result = {
+    code, desc: entry.d, value, mode: currentMode,
+    base_duty: Math.round(base * 100) / 100,
+    base_rate_type: rt,
+    base_rate: rt === 'percent' ? (bp || 0) : String(rv),
+    s301_duty: Math.round(s3d * 100) / 100,
+    s301_rate: s3r,
+    mpf: Math.round(mpf * 100) / 100,
+    hmf: Math.round(hmf * 100) / 100,
+    total: Math.round((base + s3d + mpf + hmf) * 100) / 100
+  };
+  render(result);
+}
+
+function render(d) {
+  document.getElementById('r_hts').textContent = d.code;
+  document.getElementById('r_desc').textContent = d.desc || '-';
+  document.getElementById('r_value').textContent = '$' + d.value.toLocaleString('en-US', {minimumFractionDigits:2});
+  document.getElementById('r_base').textContent = d.base_rate_type === 'specific'
+    ? '从量税 → 需人工确认'
+    : '$' + d.base_duty.toFixed(2) + ' (' + d.base_rate + '%)';
+
+  const row301 = document.getElementById('row_301');
+  if (d.s301_duty > 0 || d.s301_rate) {
+    document.getElementById('r_301').textContent = '$' + d.s301_duty.toFixed(2) + ' (+' + d.s301_rate + '%)';
+    row301.classList.remove('hidden');
+  } else { row301.classList.add('hidden'); }
+
+  document.getElementById('r_mpf').textContent = '$' + d.mpf.toFixed(2);
+
+  const rowHmf = document.getElementById('row_hmf');
+  if (currentMode === 'ocean') {
+    document.getElementById('r_hmf').textContent = '$' + d.hmf.toFixed(2);
+    rowHmf.classList.remove('hidden');
+  } else { rowHmf.classList.add('hidden'); }
+
+  document.getElementById('r_total').textContent = '$' + d.total.toFixed(2);
+  document.getElementById('r_effective').textContent = ((d.total / d.value) * 100).toFixed(2) + '%';
+
+  const results = document.getElementById('results');
+  results.classList.remove('hidden');
+  results.scrollIntoView({behavior:'smooth'});
+}
+
+function showMsg(msg) {
+  const el = document.getElementById('message');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+function hideMsg() { document.getElementById('message').style.display = 'none'; }
+
+// ── Keyboard shortcut ──
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && document.activeElement === document.getElementById('valueInput')) {
+    calculate();
+  }
+});
+</script>
+</body>
+</html>
