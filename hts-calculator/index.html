@@ -25,6 +25,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei
       <div id="autocomplete" class="hidden absolute z-10 w-full bg-white border border-slate-200 rounded-lg shadow-lg mt-1 max-h-64 overflow-y-auto"></div>
       <p id="htsDesc" class="text-xs text-slate-400 mt-1 hidden"></p>
     </div>
+    <div id="cnHint" class="hidden bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3 text-sm">🇨🇳 <span class="text-amber-700">中国编码</span> <span id="cnHintCode" class="font-mono text-amber-800 font-semibold"></span> <span class="text-amber-600">→ 🇺🇸 美国对应编码：</span><span id="cnHintUS" class="font-mono text-amber-800 font-semibold"></span><br><span id="cnHintDesc" class="text-xs text-amber-600 mt-1"></span></div>
     <div class="grid grid-cols-2 gap-4 mb-4">
       <div>
         <label class="block text-sm font-medium text-slate-700 mb-1.5">申报货值 (USD) <span class="text-red-500">*</span></label>
@@ -114,18 +115,19 @@ function search(q) {
   return out.slice(0, 20).map(x => ({c:x[0], d:x[1], r:x[2], t:x[3]}));
 }
 
-function lookup(q) {
+function lookup(q, raw) {
   q = q.replace(/[^0-9.]/g, '');
-  if (D.hs[q]) return [q, D.hs[q]];
-  let s = q;
+  const isCN = raw && raw.length >= 8 && raw.indexOf('.') === -1;
+  if (D.hs[q]) return [q, D.hs[q], isCN && !raw.includes('.') ? raw : null];
+  let s = q, cnFlag = isCN ? raw : null;
   while (s.length > 4) {
     s = s.replace(/\.?0*$/, '');
     if (s === q) break;
-    if (D.hs[s]) return [s, D.hs[s]];
+    if (D.hs[s]) return [s, D.hs[s], cnFlag];
     q = s;
   }
-  for (const c in D.hs) { if (c.startsWith(q)) return [c, D.hs[c]]; }
-  return [null, null];
+  for (const c in D.hs) { if (c.startsWith(q)) return [c, D.hs[c], cnFlag]; }
+  return [null, null, null];
 }
 
 function pct(v) {
@@ -206,12 +208,19 @@ function calculate() {
   if (!h) { showMsg('请输入 HTS 编码'); return; }
   if (!v || parseFloat(v) <= 0) { showMsg('请输入有效货值'); return; }
   const val = parseFloat(v);
-  const [code, entry] = lookup(h);
+  const [code, entry, cnRaw] = lookup(h, document.getElementById('htsInput').value.trim());
   if (!entry) { showMsg('未找到该 HTS 编码'); return; }
-  render(calc(code, entry, val, currentMode), val);
+  render(calc(code, entry, val, currentMode), val, cnRaw && cnRaw !== code ? cnRaw : null, code);
 }
 
-function render(d, v) {
+function render(d, v, cnRaw, usCode) {
+  const hint = document.getElementById('cnHint');
+  if (cnRaw) {
+    document.getElementById('cnHintCode').textContent = cnRaw;
+    document.getElementById('cnHintUS').textContent = usCode;
+    document.getElementById('cnHintDesc').textContent = d.desc || '';
+    hint.classList.remove('hidden');
+  } else { hint.classList.add('hidden'); }
   document.getElementById('r_hts').textContent = d.code;
   document.getElementById('r_desc').textContent = d.desc || '-';
   document.getElementById('r_value').textContent = '$' + v.toLocaleString('en-US', {minimumFractionDigits:2});
